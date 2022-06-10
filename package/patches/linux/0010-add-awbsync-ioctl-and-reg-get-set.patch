@@ -1,0 +1,566 @@
+From 8804a1dda2a32b0e677c24a631b94ffbea1b40b6 Mon Sep 17 00:00:00 2001
+From: alex-guo <guoshidong@canaan-creative.com>
+Date: Thu, 9 Jun 2022 16:18:08 +0800
+Subject: [PATCH] add-awbsync-ioctl-and-reg-get-set
+
+---
+ .../canaan-isp/isp_2k/core/isp_core_drv.h     |  20 ++++
+ .../canaan-isp/isp_2k/core/isp_core_reg.h     |  22 ++++
+ .../canaan-isp/isp_2k/core/isp_f2k_core_drv.c |  37 ++++++
+ .../canaan-isp/isp_2k/core/isp_r2k_core_drv.c |  37 ++++++
+ .../platform/canaan-isp/isp_2k/isp_f2k.c      |  83 ++++++++++---
+ .../platform/canaan-isp/isp_2k/isp_r2k.c      | 109 +++++++++++++-----
+ include/uapi/linux/k510isp.h                  |  23 ++++
+ 7 files changed, 280 insertions(+), 51 deletions(-)
+
+diff --git a/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_drv.h b/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_drv.h
+index 45dfc599..16e1a88e 100755
+--- a/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_drv.h
++++ b/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_drv.h
+@@ -482,6 +482,20 @@ typedef struct _ISP_CORE_ATRR_S
+     ISP_CORE_AF_CTL_S stAfCtl;
+     ISP_CORE_AF_STS_S stAfSts;
+ } ISP_CORE_ATRR_S;
++
++typedef struct _ISP_CORE_AWB_SYNC_INFO_S
++{
++    unsigned int awb_red_value;
++    unsigned int awb_blue_value;
++
++}ISP_CORE_AWB_SYNC_INFO_S;
++
++typedef struct _ISP_CORE_REG_VAL_S
++{
++    unsigned int reg_addr;
++    unsigned int reg_value;
++}ISP_CORE_REG_VAL_S;
++
+ /*
+ *F2K
+ */
+@@ -508,11 +522,14 @@ int Isp_Drv_F2k_Core_SetOtcCtl(struct k510_isp_device *isp,ISP_CORE_OTC_CTL_S *p
+ int Isp_Drv_F2k_Core_SetLdcCtl(struct k510_isp_device *isp,ISP_CORE_LDC_CTL_S *pstLdcCtl);
+ int Isp_Drv_F2k_Core_SetAfCtl(struct k510_isp_device *isp,ISP_CORE_AF_CTL_S *pstAfCtl);
+ int Isp_Drv_F2k_Core_SetRamWrStatus(struct k510_isp_device *isp,unsigned int data);
++int Isp_Drv_F2k_Core_GetAwbSyncInfo(struct k510_isp_device *isp,ISP_CORE_AWB_SYNC_INFO_S *pAwbSyncInfo);
++int Isp_Drv_F2k_Core_SetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal);
+ //
+ int Isp_Drv_F2k_Core_GetAeSts(struct k510_isp_device *isp,ISP_CORE_AE_STS_S *pAeSts);
+ int Isp_Drv_F2k_Core_GetAwbSts(struct k510_isp_device *isp,ISP_CORE_AWB_STS_S *pAwbSts);
+ int Isp_Drv_F2k_Core_GetAfSts(struct k510_isp_device *isp,ISP_CORE_AF_STS_S *pgtAfSts);
+ int Isp_Drv_F2k_Core_GetRamRdStatus(struct k510_isp_device *isp);
++int Isp_Drv_F2k_Core_GetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal);
+ /*
+ *R2K
+ */
+@@ -537,10 +554,13 @@ int Isp_Drv_R2k_Core_SetOtcCtl(struct k510_isp_device *isp,ISP_CORE_OTC_CTL_S *p
+ int Isp_Drv_R2k_Core_SetLdcCtl(struct k510_isp_device *isp,ISP_CORE_LDC_CTL_S *pstLdcCtl);
+ int Isp_Drv_R2k_Core_SetAfCtl(struct k510_isp_device *isp,ISP_CORE_AF_CTL_S *pstAfCtl);
+ int Isp_Drv_R2k_Core_SetRamWrStatus(struct k510_isp_device *isp,unsigned int data);
++int Isp_Drv_R2k_Core_SetAwbSyncInfo(struct k510_isp_device *isp,ISP_CORE_AWB_SYNC_INFO_S *pAwbSyncInfo);
++int Isp_Drv_R2k_Core_SetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal);
+ //
+ int Isp_Drv_R2k_Core_GetAeSts(struct k510_isp_device *isp,ISP_CORE_AE_STS_S *pAeSts);
+ int Isp_Drv_R2k_Core_GetAwbSts(struct k510_isp_device *isp,ISP_CORE_AWB_STS_S *pAwbSts);
+ int Isp_Drv_R2k_Core_GetAfSts(struct k510_isp_device *isp,ISP_CORE_AF_STS_S *pgtAfSts);
+ int Isp_Drv_R2k_Core_GetRamRdStatus(struct k510_isp_device *isp);
++int Isp_Drv_R2k_Core_GetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal);
+ 
+ #endif /*_ISP_CORE_DRV_H_*/
+\ No newline at end of file
+diff --git a/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_reg.h b/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_reg.h
+index b70d20af..97bd78b5 100755
+--- a/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_reg.h
++++ b/drivers/media/platform/canaan-isp/isp_2k/core/isp_core_reg.h
+@@ -2310,6 +2310,28 @@ union U_ISP_CORE_AF_STAT_PIXEL_NUM
+     unsigned int    u32;
+ } ;
+ 
++union U_ISP_CORE_REG_CFG_ADDR
++{
++    /* Define the struct bits */
++    struct
++    {
++        unsigned int    reg_value                : 32  ; /* [31 ..0 ]  */
++    } bits;    /* Define an unsigned member */
++
++    unsigned int    u32;
++} ;
++
++union U_ISP_CORE_REG_CFG_VALUE
++{
++    /* Define the struct bits */
++    struct
++    {
++        unsigned int    reg_value                : 32  ; /* [31 ..0 ]  */
++    } bits;    /* Define an unsigned member */
++
++    unsigned int    u32;
++} ;
++
+ //itc
+ #define  ISP_CORE_ITC_CTL               		(0x0000)
+ #define  ISP_CORE_IMAGE_HEIGHT          		(0x0004)
+diff --git a/drivers/media/platform/canaan-isp/isp_2k/core/isp_f2k_core_drv.c b/drivers/media/platform/canaan-isp/isp_2k/core/isp_f2k_core_drv.c
+index 8e351db0..50f59bfa 100755
+--- a/drivers/media/platform/canaan-isp/isp_2k/core/isp_f2k_core_drv.c
++++ b/drivers/media/platform/canaan-isp/isp_2k/core/isp_f2k_core_drv.c
+@@ -606,6 +606,19 @@ int Isp_Drv_F2k_Core_GetAwbSts(struct k510_isp_device *isp,ISP_CORE_AWB_STS_S *p
+ 
+   	return 0;
+ }
++
++int Isp_Drv_F2k_Core_GetAwbSyncInfo(struct k510_isp_device *isp,ISP_CORE_AWB_SYNC_INFO_S *pAwbSyncInfo)
++{
++	union U_ISP_CORE_AWB_RED_VALUE gtAwbRVal;
++  	gtAwbRVal.u32 = isp_reg_readl(isp,ISP_IOMEM_F2K_CORE,ISP_CORE_AWB_RED_VALUE);
++  	pAwbSyncInfo->awb_red_value = gtAwbRVal.u32;
++
++  	union U_ISP_CORE_AWB_BLUE_VALUE gtAwbBVal;
++  	gtAwbBVal.u32 = isp_reg_readl(isp,ISP_IOMEM_F2K_CORE,ISP_CORE_AWB_BLUE_VALUE);
++  	pAwbSyncInfo->awb_blue_value = gtAwbBVal.u32;
++	return 0;
++}
++
+ /*
+ *CSC
+ */
+@@ -1201,4 +1214,28 @@ int Isp_Drv_F2k_Core_GetRamRdStatus(struct k510_isp_device *isp)
+ 	int isp_ram_ready = isp_reg_readl(isp,ISP_IOMEM_F2K_CORE,ISP_CORE_RAM_RD_STATUS);
+ 
+ 	return isp_ram_ready;
++}
++
++/*
++*F2K Reg Opt
++*/
++
++int Isp_Drv_F2k_Core_SetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal)
++{
++	union U_ISP_CORE_REG_CFG_ADDR stRegAddr;
++	union U_ISP_CORE_REG_CFG_VALUE stRegVal;
++	stRegAddr.u32 = pRegVal->reg_addr;
++	stRegVal.u32 = pRegVal->reg_value;
++	isp_reg_writel(isp,stRegVal.u32,ISP_IOMEM_F2K_CORE,stRegAddr.u32);
++	return 0;
++}
++
++int Isp_Drv_F2k_Core_GetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal)
++{
++	union U_ISP_CORE_REG_CFG_ADDR gtRegAddr;
++	union U_ISP_CORE_REG_CFG_VALUE gtRegVal;
++	gtRegAddr.u32 = pRegVal->reg_addr;
++	gtRegVal.u32 = isp_reg_readl(isp,ISP_IOMEM_F2K_CORE,gtRegAddr.u32);
++	pRegVal->reg_value = gtRegVal.u32;
++	return 0;
+ }
+\ No newline at end of file
+diff --git a/drivers/media/platform/canaan-isp/isp_2k/core/isp_r2k_core_drv.c b/drivers/media/platform/canaan-isp/isp_2k/core/isp_r2k_core_drv.c
+index b98649f5..91cee986 100755
+--- a/drivers/media/platform/canaan-isp/isp_2k/core/isp_r2k_core_drv.c
++++ b/drivers/media/platform/canaan-isp/isp_2k/core/isp_r2k_core_drv.c
+@@ -601,6 +601,43 @@ int Isp_Drv_R2k_Core_GetAwbSts(struct k510_isp_device *isp,ISP_CORE_AWB_STS_S *p
+ 
+   	return 0;
+ }
++
++int Isp_Drv_R2k_Core_SetAwbSyncInfo(struct k510_isp_device *isp,ISP_CORE_AWB_SYNC_INFO_S *pAwbSyncInfo)
++{
++	union U_ISP_CORE_AWB_RED_GAIN_ADJUST stAwbRVal;
++  	stAwbRVal.u32 = pAwbSyncInfo->awb_red_value;
++  	isp_reg_writel(isp,stAwbRVal.u32,ISP_IOMEM_R2K_CORE,ISP_CORE_AWB_RED_GAIN_ADJUST);
++
++  	union U_ISP_CORE_AWB_BLUE_GAIN_ADJUST stAwbBVal;
++  	stAwbBVal.u32 = pAwbSyncInfo->awb_blue_value;
++  	isp_reg_writel(isp,stAwbBVal.u32,ISP_IOMEM_R2K_CORE,ISP_CORE_AWB_BLUE_GAIN_ADJUST);
++	return 0;
++}
++
++/*
++*R2K Reg Opt
++*/
++
++int Isp_Drv_R2k_Core_SetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal)
++{
++	union U_ISP_CORE_REG_CFG_ADDR stRegAddr;
++	union U_ISP_CORE_REG_CFG_VALUE stRegVal;
++	stRegAddr.u32 = pRegVal->reg_addr;
++	stRegVal.u32 = pRegVal->reg_value;
++	isp_reg_writel(isp,stRegVal.u32,ISP_IOMEM_R2K_CORE,stRegAddr.u32);
++	return 0;
++}
++
++int Isp_Drv_R2k_Core_GetReg(struct k510_isp_device *isp,ISP_CORE_REG_VAL_S *pRegVal)
++{
++	union U_ISP_CORE_REG_CFG_ADDR gtRegAddr;
++	union U_ISP_CORE_REG_CFG_VALUE gtRegVal;
++	gtRegAddr.u32 = pRegVal->reg_addr;
++	gtRegVal.u32 = isp_reg_readl(isp,ISP_IOMEM_R2K_CORE,gtRegAddr.u32);
++	pRegVal->reg_value = gtRegVal.u32;
++	return 0;
++}
++
+ /*
+ *CSC
+ */
+diff --git a/drivers/media/platform/canaan-isp/isp_2k/isp_f2k.c b/drivers/media/platform/canaan-isp/isp_2k/isp_f2k.c
+index 95a0a076..c7d26d86 100755
+--- a/drivers/media/platform/canaan-isp/isp_2k/isp_f2k.c
++++ b/drivers/media/platform/canaan-isp/isp_2k/isp_f2k.c
+@@ -27,18 +27,18 @@
+ #include "fbd/isp_3dnr_fbd_drv.h"
+ #include "remap/isp_remap_drv.h"
+ #include "table/isp_table_drv.h"
+-
+-static unsigned long long get_usec(void)
+-{
+-	struct timeval ts;
+-
+-	do_gettimeofday(&ts);
+-
+-	ts.tv_sec &= 0x1ffffLL;
+-
+-	return ts.tv_sec*1000000 + ts.tv_usec;
+-}
+-
++
++static unsigned long long get_usec(void)
++{
++	struct timeval ts;
++
++	do_gettimeofday(&ts);
++
++	ts.tv_sec &= 0x1ffffLL;
++
++	return ts.tv_sec*1000000 + ts.tv_usec;
++}
++
+ 
+ /****************************************************************************
+ *wrap
+@@ -1108,6 +1108,36 @@ static int isp_f2k_core_SetAwbCtl(struct k510_isp_device *isp,AWB_INFO_S *awbInf
+     Isp_Drv_F2k_Core_SetAwbCtl(isp,&stAwbCtl);
+ 	return 0;
+ }
++
++static int isp_f2k_core_awb_sync_info_get(struct k510_isp_device *isp,struct k510isp_awb_sync_info *awbSyncInfo)
++{
++	ISP_CORE_AWB_SYNC_INFO_S gtAwbSyncInfo;
++	Isp_Drv_F2k_Core_GetAwbSyncInfo(isp,&gtAwbSyncInfo);
++	awbSyncInfo->awb_ar = gtAwbSyncInfo.awb_red_value;
++	awbSyncInfo->awb_ab = gtAwbSyncInfo.awb_blue_value;
++	return 0;
++}
++
++// reg opt
++
++static int isp_f2k_core_RegSet(struct k510_isp_device *isp,struct k510isp_reg_val *reg_val)
++{
++	ISP_CORE_REG_VAL_S stRegVal;
++	stRegVal.reg_addr = reg_val->reg_addr;
++	stRegVal.reg_value = reg_val->reg_value;
++	Isp_Drv_F2k_Core_SetReg(isp,&stRegVal);
++	return 0;
++}
++
++static int isp_f2k_core_RegGet(struct k510_isp_device *isp,struct k510isp_reg_val *reg_val)
++{
++	ISP_CORE_REG_VAL_S gtRegVal;
++	gtRegVal.reg_addr = reg_val->reg_addr;
++	Isp_Drv_F2k_Core_GetReg(isp,&gtRegVal);
++	reg_val->reg_value = gtRegVal.reg_value;
++	return 0;
++}
++
+ //WDR
+ static int isp_f2k_core_SetWdrCtl(struct k510_isp_device *isp,struct isp_core_wdr_Info *wdrInfo)
+ {
+@@ -1713,7 +1743,7 @@ static void isp_f2k_set_main_outaddr(struct isp_f2k_device *f2k, u32 addr)
+ 	struct k510_isp_device *isp = to_isp_device(f2k);
+ 	struct isp_wrap_cfg_info *isp_wrap_cfg = &f2k->isp_cfg.isp_wrap_cfg;
+ 	struct isp_wrap_main_info *main_info = &isp_wrap_cfg->mainInfo;
+-
++
+ 	isp_reg_writel(isp,addr,ISP_IOMEM_F2K_WRAP,ISP_WRAP_MAIN_Y_BUF0_BASE);
+ 	isp_reg_writel(isp,addr,ISP_IOMEM_F2K_WRAP,ISP_WRAP_MAIN_Y_BUF1_BASE);
+ 	//dev_dbg(f2k->isp->dev,"%s:line_stride (%d),Width(%d),Height(%d)\n",\
+@@ -1736,7 +1766,7 @@ static void isp_f2k_set_out0_outaddr(struct isp_f2k_device *f2k, u32 addr)
+ 	struct k510_isp_device *isp = to_isp_device(f2k);
+ 	struct isp_wrap_cfg_info *isp_wrap_cfg = &f2k->isp_cfg.isp_wrap_cfg;
+ 	struct isp_wrap_ds0_info *ds0_info = &isp_wrap_cfg->ds0Info;
+-	
++	
+ #ifdef SET_DIFF_BUFF
+ 	if((f2k->pingpong[DS0_VIDEO]%2) == 0)
+ 	{
+@@ -1759,7 +1789,7 @@ static void isp_f2k_set_out0_outaddr(struct isp_f2k_device *f2k, u32 addr)
+ 	isp_reg_writel(isp,addr,ISP_IOMEM_F2K_WRAP,ISP_WRAP_DS0_UV_BUF0_BASE);
+ 	isp_reg_writel(isp,addr,ISP_IOMEM_F2K_WRAP,ISP_WRAP_DS0_UV_BUF1_BASE);
+ 	isp_reg_writel(isp,0x30001,ISP_IOMEM_F2K_WRAP,ISP_WRAP_CONFIG_DONE);
+-#endif
++#endif
+ }
+ 
+ /*
+@@ -2965,8 +2995,8 @@ static void f2k_isr_out0_buffer(struct isp_f2k_device *f2k)
+ 	}
+ 
+ 	video_buffer_next(f2k, DS0_VIDEO);
+-
+-	f2k->profile.buf_set_time = get_usec();
++
++	f2k->profile.buf_set_time = get_usec();
+ 
+ 	pipe->state |= ISP_PIPELINE_IDLE_OUTPUT;	
+ 
+@@ -3122,8 +3152,8 @@ static int f2k_video_queue(struct k510isp_video *video, struct k510isp_buffer *b
+ 		f2k->pingpong[DS2_VIDEO] = 0;
+ 		isp_f2k_set_out2_outaddr(f2k, buffer->dma);
+ 	}
+-	
+-#ifdef SET_DIFF_BUFF
++	
++#ifdef SET_DIFF_BUFF
+ 	buffer++;
+ 	if (f2k->output & ISP_F2K_OUTPUT_FBC)
+ 	{
+@@ -3252,6 +3282,21 @@ static long f2k_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+ 		reset_control_reset(f2k->isp->reset[FBC_RST]);		
+ 		mutex_unlock(&f2k->ioctl_lock);
+ 		break;
++	case VIDIOC_K510ISP_F2K_AWB_VAL_GET:
++		mutex_lock(&f2k->ioctl_lock);
++		isp_f2k_core_awb_sync_info_get(f2k->isp,arg);
++		mutex_unlock(&f2k->ioctl_lock);
++		break;
++	case VIDIOC_K510ISP_F2K_CORE_REG_SET:
++		mutex_lock(&f2k->ioctl_lock);
++		isp_f2k_core_RegSet(f2k->isp,arg);
++		mutex_unlock(&f2k->ioctl_lock);
++		break;
++	case VIDIOC_K510ISP_F2K_CORE_REG_GET:
++		mutex_lock(&f2k->ioctl_lock);
++		isp_f2k_core_RegGet(f2k->isp,arg);
++		mutex_unlock(&f2k->ioctl_lock);
++		break;
+ 	default:
+ 		dev_err(f2k->isp->dev,"%s:cmd(0x%x) err!\n",__func__,cmd);
+ 		return -ENOIOCTLCMD;
+diff --git a/drivers/media/platform/canaan-isp/isp_2k/isp_r2k.c b/drivers/media/platform/canaan-isp/isp_2k/isp_r2k.c
+index 183ba590..0d079434 100755
+--- a/drivers/media/platform/canaan-isp/isp_2k/isp_r2k.c
++++ b/drivers/media/platform/canaan-isp/isp_2k/isp_r2k.c
+@@ -25,17 +25,17 @@
+ #include "ds/isp_ds_drv.h"
+ #include "remap/isp_remap_drv.h"
+ #include "table/isp_table_drv.h"
+-
+-static unsigned long long get_usec(void)
+-{
+-	struct timeval ts;
+-
+-	do_gettimeofday(&ts);
+-
+-	ts.tv_sec &= 0x1ffffLL;
+-
+-	return ts.tv_sec*1000000 + ts.tv_usec;
+-}
++
++static unsigned long long get_usec(void)
++{
++	struct timeval ts;
++
++	do_gettimeofday(&ts);
++
++	ts.tv_sec &= 0x1ffffLL;
++
++	return ts.tv_sec*1000000 + ts.tv_usec;
++}
+ 
+ /****************************************************************************
+ *wrap
+@@ -1014,6 +1014,36 @@ static int isp_r2k_core_SetAwbCtl(struct k510_isp_device *isp,AWB_INFO_S *awbInf
+     Isp_Drv_R2k_Core_SetAwbCtl(isp,&stAwbCtl);
+ 	return 0;
+ }
++
++static int isp_r2k_core_awb_sync_info_set(struct k510_isp_device *isp,struct k510isp_awb_sync_info *awbSyncInfo)
++{
++	ISP_CORE_AWB_SYNC_INFO_S stAwbSyncInfo;
++	stAwbSyncInfo.awb_red_value = awbSyncInfo->awb_ar;
++	stAwbSyncInfo.awb_blue_value = awbSyncInfo->awb_ab;
++	Isp_Drv_R2k_Core_SetAwbSyncInfo(isp,&stAwbSyncInfo);
++	return 0;
++}
++
++// reg opt
++
++static int isp_r2k_core_RegSet(struct k510_isp_device *isp,struct k510isp_reg_val *reg_val)
++{
++	ISP_CORE_REG_VAL_S stRegVal;
++	stRegVal.reg_addr = reg_val->reg_addr;
++	stRegVal.reg_value = reg_val->reg_value;
++	Isp_Drv_R2k_Core_SetReg(isp,&stRegVal);
++	return 0;
++}
++
++static int isp_r2k_core_RegGet(struct k510_isp_device *isp,struct k510isp_reg_val *reg_val)
++{
++	ISP_CORE_REG_VAL_S gtRegVal;
++	gtRegVal.reg_addr = reg_val->reg_addr;
++	Isp_Drv_R2k_Core_GetReg(isp,&gtRegVal);
++	reg_val->reg_value = gtRegVal.reg_value;
++	return 0;
++}
++
+ //CSC
+ static int isp_r2k_core_SetCscCtl(struct k510_isp_device *isp,CSC_INFO_S *cscInfo)
+ {
+@@ -1459,22 +1489,22 @@ static void isp_r2k_set_out0_outaddr(struct isp_r2k_device *r2k, u32 addr)
+ 	struct k510_isp_device *isp = to_isp_device(r2k);
+ 	struct isp_wrap_cfg_info *isp_wrap_cfg = &r2k->isp_cfg.isp_wrap_cfg;
+ 	struct isp_wrap_ds0_info *ds0_info = &isp_wrap_cfg->ds0Info;
+-
+-#ifdef SET_DIFF_BUFF
+-  if((r2k->pingpong[DS0_VIDEO]%2) == 0)
+-  {
+-    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_Y_BUF0_BASE);
+-    addr = addr + ds0_info->ds0_line_stride*ds0_info->ds0_size.Height;//1920*1080;
+-    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_UV_BUF0_BASE);
+-  }
+-  else if((r2k->pingpong[DS0_VIDEO]%2) == 1)
+-  {
+-    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_Y_BUF1_BASE);
+-    addr = addr + ds0_info->ds0_line_stride*ds0_info->ds0_size.Height;//1920*1080;
+-    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_UV_BUF1_BASE);
+-  }
+-  r2k->pingpong[DS0_VIDEO]++;
+-  isp_reg_writel(isp,0x30001,ISP_IOMEM_R2K_WRAP,ISP_WRAP_CONFIG_DONE);
++
++#ifdef SET_DIFF_BUFF
++  if((r2k->pingpong[DS0_VIDEO]%2) == 0)
++  {
++    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_Y_BUF0_BASE);
++    addr = addr + ds0_info->ds0_line_stride*ds0_info->ds0_size.Height;//1920*1080;
++    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_UV_BUF0_BASE);
++  }
++  else if((r2k->pingpong[DS0_VIDEO]%2) == 1)
++  {
++    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_Y_BUF1_BASE);
++    addr = addr + ds0_info->ds0_line_stride*ds0_info->ds0_size.Height;//1920*1080;
++    isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_UV_BUF1_BASE);
++  }
++  r2k->pingpong[DS0_VIDEO]++;
++  isp_reg_writel(isp,0x30001,ISP_IOMEM_R2K_WRAP,ISP_WRAP_CONFIG_DONE);
+ #else
+   isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_Y_BUF0_BASE);
+   isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_Y_BUF1_BASE);
+@@ -1482,7 +1512,7 @@ static void isp_r2k_set_out0_outaddr(struct isp_r2k_device *r2k, u32 addr)
+   isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_UV_BUF0_BASE);
+   isp_reg_writel(isp,addr,ISP_IOMEM_R2K_WRAP,ISP_WRAP_DS0_UV_BUF1_BASE);
+   isp_reg_writel(isp,0x30001,ISP_IOMEM_R2K_WRAP,ISP_WRAP_CONFIG_DONE);
+-#endif
++#endif
+ }
+ /*
+  * isp_r2k_set_out1_outaddr - Set memory address to save output image
+@@ -2448,7 +2478,7 @@ static void video_buffer_next(struct isp_r2k_device *r2k, enum video_type dsNum)
+       drop = 1;
+       r2k->profile.drop_cnt++;
+ 	  }
+-	}
++	}
+ 
+ 	if(drop)
+ 	{
+@@ -2720,8 +2750,8 @@ static int r2k_video_queue(struct k510isp_video *video, struct k510isp_buffer *b
+ 		r2k->pingpong[DS2_VIDEO] = 0;
+ 		isp_r2k_set_out2_outaddr(r2k, buffer->dma);
+ 	}
+-
+-#ifdef SET_DIFF_BUFF
++
++#ifdef SET_DIFF_BUFF
+ 	buffer++;
+ 	if (r2k->output & ISP_R2K_OUTPUT_FBC)
+ 	{
+@@ -2749,7 +2779,7 @@ static int r2k_video_queue(struct k510isp_video *video, struct k510isp_buffer *b
+ 		r2k->pingpong[DS2_VIDEO] = 0;
+ 		isp_r2k_set_out2_outaddr(r2k, buffer->dma);		
+ 	}
+-#endif
++#endif
+ 	/* We now have a buffer queued on the output, restart the pipeline
+ 	 * on the next r2k interrupt if running in continuous mode (or when
+ 	 * starting the stream) in external sync mode, or immediately in BT.656
+@@ -2852,6 +2882,21 @@ static long r2k_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+ 		reset_control_reset(r2k->isp->reset[ISP_R2K_RST]);
+ 		mutex_unlock(&r2k->ioctl_lock);
+ 		break;
++	case VIDIOC_K510ISP_R2K_AWB_VAL_SET:
++		mutex_lock(&r2k->ioctl_lock);
++		isp_r2k_core_awb_sync_info_set(r2k->isp,arg);
++		mutex_unlock(&r2k->ioctl_lock);
++		break;
++	case VIDIOC_K510ISP_R2K_CORE_REG_SET:
++		mutex_lock(&r2k->ioctl_lock);
++		isp_r2k_core_RegSet(r2k->isp,arg);
++		mutex_unlock(&r2k->ioctl_lock);
++		break;
++	case VIDIOC_K510ISP_R2K_CORE_REG_GET:
++		mutex_lock(&r2k->ioctl_lock);
++		isp_r2k_core_RegGet(r2k->isp,arg);
++		mutex_unlock(&r2k->ioctl_lock);
++		break;
+ 	default:
+ 		dev_err(r2k->isp->dev,"%s:cmd(0x%x) err!\n",__func__,cmd);
+ 		return -ENOIOCTLCMD;
+diff --git a/include/uapi/linux/k510isp.h b/include/uapi/linux/k510isp.h
+index 2301e1da..18ad2169 100755
+--- a/include/uapi/linux/k510isp.h
++++ b/include/uapi/linux/k510isp.h
+@@ -96,6 +96,18 @@
+ 	_IOWR('V', BASE_VIDIOC_PRIVATE + 40,unsigned long)
+ #define VIDIOC_K510ISP_SYSCTL_RST_R2K \
+ 	_IOWR('V', BASE_VIDIOC_PRIVATE + 41,unsigned long)
++#define VIDIOC_K510ISP_F2K_AWB_VAL_GET \
++	_IOWR('V', BASE_VIDIOC_PRIVATE + 42, struct k510isp_awb_sync_info)
++#define VIDIOC_K510ISP_R2K_AWB_VAL_SET \
++	_IOWR('V', BASE_VIDIOC_PRIVATE + 43, struct k510isp_awb_sync_info)
++#define VIDIOC_K510ISP_F2K_CORE_REG_SET \
++	_IOWR('V', BASE_VIDIOC_PRIVATE + 44, struct k510isp_reg_val)
++#define VIDIOC_K510ISP_F2K_CORE_REG_GET \
++	_IOWR('V', BASE_VIDIOC_PRIVATE + 45, struct k510isp_reg_val)
++#define VIDIOC_K510ISP_R2K_CORE_REG_SET \
++	_IOWR('V', BASE_VIDIOC_PRIVATE + 46, struct k510isp_reg_val)
++#define VIDIOC_K510ISP_R2K_CORE_REG_GET \
++	_IOWR('V', BASE_VIDIOC_PRIVATE + 47, struct k510isp_reg_val)
+ //
+ /*
+  * Events
+@@ -170,6 +182,12 @@ struct k510isp_awb_stats{
+     __u32 awb_ing;//AWB value of green when only using original image
+     __u32 awb_inb;//AWB value of blue when only using original image
+ };
++
++struct k510isp_awb_sync_info {
++    __u32 awb_ar; // AWB value of red
++    __u32 awb_ab; // AWB value of blue
++};
++
+ //ae
+ struct k510isp_ae_config{
+     __u32 ae_st_en;//Auto-shutter enable, active high
+@@ -266,4 +284,9 @@ struct k510isp_stat_event_status {
+ 	__u16 config_counter;
+ 	__u8 buf_err;
+ };
++
++struct k510isp_reg_val {
++    __u32 reg_addr;
++    __u32 reg_value;
++};
+ #endif
+-- 
+2.36.1
+
